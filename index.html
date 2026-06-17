@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<meta name="theme-color" content="#1a1a2e">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="AudioSplit">
+<link rel="manifest" href="#" id="manifest-link">
+<title>AudioSplit</title>
+<style>
+:root{--bg:#0f0f1a;--surface:#1a1a2e;--surface2:#16213e;--accent:#e94560;--accent2:#0f3460;--text:#eaeaea;--text2:#a0a0b0;--radius:14px;}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;padding:16px;padding-bottom:80px;}
+h1{font-size:1.5rem;font-weight:700;color:var(--accent);margin-bottom:4px;}
+.subtitle{font-size:.8rem;color:var(--text2);margin-bottom:20px;}
+.card{background:var(--surface);border-radius:var(--radius);padding:16px;margin-bottom:16px;}
+.card-title{font-size:.75rem;text-transform:uppercase;letter-spacing:1px;color:var(--text2);margin-bottom:12px;}
+.drop-zone{border:2px dashed var(--accent2);border-radius:var(--radius);padding:32px 16px;text-align:center;cursor:pointer;transition:border-color .2s,background .2s;}
+.drop-zone.drag-over{border-color:var(--accent);background:rgba(233,69,96,.08);}
+.drop-zone .icon{font-size:2.5rem;margin-bottom:8px;}
+.drop-zone p{color:var(--text2);font-size:.9rem;}
+.drop-zone strong{color:var(--text);}
+#fileInput{display:none;}
+.param-row{display:flex;align-items:center;gap:10px;margin-bottom:10px;}
+.param-row label{flex:1;font-size:.85rem;color:var(--text2);}
+.param-row input[type=range]{flex:1.5;accent-color:var(--accent);}
+.param-val{font-size:.85rem;color:var(--accent);min-width:54px;text-align:right;font-weight:600;}
+.btn{display:block;width:100%;padding:14px;background:var(--accent);color:#fff;border:none;border-radius:var(--radius);font-size:1rem;font-weight:700;cursor:pointer;transition:opacity .2s;-webkit-tap-highlight-color:transparent;}
+.btn:disabled{opacity:.4;cursor:default;}
+.btn-outline{background:transparent;border:2px solid var(--accent);color:var(--accent);margin-top:8px;}
+.btn-small{display:inline-block;width:auto;padding:8px 14px;font-size:.8rem;border-radius:8px;margin-top:6px;}
+.progress-bar-wrap{background:var(--surface2);border-radius:6px;height:8px;margin:10px 0;overflow:hidden;}
+.progress-bar{height:100%;background:var(--accent);width:0%;transition:width .2s;border-radius:6px;}
+canvas{width:100%;height:80px;border-radius:8px;background:var(--surface2);display:block;margin:10px 0;}
+.result-item{background:var(--surface2);border-radius:10px;padding:12px;margin-bottom:10px;display:flex;align-items:center;gap:10px;}
+.result-item .info{flex:1;}
+.result-item .name{font-size:.85rem;font-weight:600;}
+.result-item .meta{font-size:.75rem;color:var(--text2);margin-top:2px;}
+.result-item .dl-btn{padding:8px 12px;background:var(--accent);color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:.8rem;font-weight:600;white-space:nowrap;-webkit-tap-highlight-color:transparent;}
+.log{font-size:.72rem;color:var(--text2);max-height:120px;overflow-y:auto;font-family:monospace;line-height:1.6;}
+.log .ts{color:#0f3460;}
+#install-banner{display:none;position:fixed;bottom:0;left:0;right:0;background:var(--surface);border-top:1px solid var(--accent2);padding:12px 16px;z-index:999;gap:10px;align-items:center;}
+#install-banner span{flex:1;font-size:.85rem;}
+#install-banner button{padding:8px 16px;border:none;border-radius:8px;font-weight:700;cursor:pointer;}
+#btn-install{background:var(--accent);color:#fff;}
+#btn-dismiss{background:transparent;color:var(--text2);}
+.flex{display:flex;}
+</style>
+</head>
+<body>
+<h1>AudioSplit</h1>
+<p class="subtitle">Нарезка WAV / MP3 по паузам без разрыва речи</p>
+
+<input type="file" id="fileInput" accept=".wav,.mp3,audio/wav,audio/mpeg">
+
+<div class="card">
+  <div class="card-title">Файл</div>
+  <div class="drop-zone" id="dropZone">
+    <div class="icon">🎵</div>
+    <p><strong>Нажми или перетащи файл</strong></p>
+    <p>WAV или MP3</p>
+  </div>
+  <div id="fileInfo" style="margin-top:10px;font-size:.85rem;color:var(--text2);"></div>
+</div>
+
+<div class="card">
+  <div class="card-title">Параметры</div>
+  <div class="param-row">
+    <label>Порог тишины</label>
+    <input type="range" id="silenceThresh" min="-60" max="-10" step="1" value="-35">
+    <span class="param-val" id="silenceThreshVal">-35 дБ</span>
+  </div>
+  <div class="param-row">
+    <label>Мин. пауза</label>
+    <input type="range" id="minSilence" min="0.1" max="2.0" step="0.1" value="0.5">
+    <span class="param-val" id="minSilenceVal">0.5 с</span>
+  </div>
+  <div class="param-row">
+    <label>Макс. размер</label>
+    <input type="range" id="maxSize" min="1" max="25" step="0.5" value="8">
+    <span class="param-val" id="maxSizeVal">8.0 МБ</span>
+  </div>
+  <div class="param-row">
+    <label>Отступ</label>
+    <input type="range" id="padding" min="0" max="0.5" step="0.05" value="0.2">
+    <span class="param-val" id="paddingVal">0.20 с</span>
+  </div>
+</div>
+
+<div class="card" id="waveCard" style="display:none;">
+  <div class="card-title">Волновая форма</div>
+  <canvas id="waveCanvas"></canvas>
+</div>
+
+<button class="btn" id="processBtn" disabled>Нарезать</button>
+
+<div class="card" id="progressCard" style="display:none;">
+  <div class="card-title">Прогресс</div>
+  <div class="progress-bar-wrap"><div class="progress-bar" id="progressBar"></div></div>
+  <div id="progressText" style="font-size:.8rem;color:var(--text2);margin-top:4px;"></div>
+</div>
+
+<div class="card" id="resultsCard" style="display:none;">
+  <div class="card-title">Результаты</div>
+  <button class="btn btn-outline btn-small" id="downloadAllBtn">Скачать все</button>
+  <div id="resultsList" style="margin-top:12px;"></div>
+</div>
+
+<div class="card">
+  <div class="card-title">Лог</div>
+  <div class="log" id="log"></div>
+</div>
+
+<div id="install-banner" class="flex">
+  <span>📲 Установить AudioSplit</span>
+  <button id="btn-dismiss">Нет</button>
+  <button id="btn-install">Установить</button>
+</div>
+
+<script>
+// manifest
+(function(){
+  var m={name:"AudioSplit",short_name:"AudioSplit",start_url:".",display:"standalone",background_color:"#0f0f1a",theme_color:"#1a1a2e",icons:[{src:"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",sizes:"192x192",type:"image/png"}]};
+  var blob=new Blob([JSON.stringify(m)],{type:'application/manifest+json'});
+  document.getElementById('manifest-link').href=URL.createObjectURL(blob);
+})();
+
+// SW
+if('serviceWorker' in navigator){
+  var sw='self.addEventListener("install",e=>{self.skipWaiting();});self.addEventListener("fetch",e=>{e.respondWith(fetch(e.request).catch(()=>caches.match(e.request)));});';
+  var swBlob=new Blob([sw],{type:'application/javascript'});
+  navigator.serviceWorker.register(URL.createObjectURL(swBlob)).catch(function(){});
+}
+
+// PWA install banner
+var deferredPrompt=null;
+var banner=document.getElementById('install-banner');
+banner.style.display='none';
+window.addEventListener('beforeinstallprompt',function(e){
+  e.preventDefault(); deferredPrompt=e; banner.style.display='flex';
+});
+document.getElementById('btn-install').addEventListener('click',function(){
+  if(deferredPrompt){deferredPrompt.prompt();deferredPrompt=null;}
+  banner.style.display='none';
+});
+document.getElementById('btn-dismiss').addEventListener('click',function(){
+  banner.style.display='none';
+});
+
+// State
+var audioBuffer=null;
+var audioCtx=null;
+var origFileName='audio';
+var results=[];
+
+// Log
+function addLog(msg){
+  var el=document.getElementById('log');
+  var now=new Date();
+  var ts=now.toTimeString().slice(0,8);
+  el.innerHTML+='<div><span class="ts">['+ts+']</span> '+msg+'</div>';
+  el.scrollTop=el.scrollHeight;
+}
+
+// Sliders
+function bindSlider(id,valId,fmt){
+  var s=document.getElementById(id);
+  var v=document.getElementById(valId);
+  s.addEventListener('input',function(){v.textContent=fmt(s.value);});
+  v.textContent=fmt(s.value);
+}
+bindSlider('silenceThresh','silenceThreshVal',function(v){return v+' дБ';});
+bindSlider('minSilence','minSilenceVal',function(v){return parseFloat(v).toFixed(1)+' с';});
+bindSlider('maxSize','maxSizeVal',function(v){return parseFloat(v).toFixed(1)+' МБ';});
+bindSlider('padding','paddingVal',function(v){return parseFloat(v).toFixed(2)+' с';});
+
+// File handling -- ОДИН обработчик, без вложенных элементов
+var fileInput=document.getElementById('fileInput');
+var dropZone=document.getElementById('dropZone');
+
+dropZone.addEventListener('click',function(e){
+  // предотвращаем всплытие чтобы клик не дублировался
+  e.stopPropagation();
+  fileInput.value='';
+  fileInput.click();
+});
+
+// fileInput не внутри dropZone -- событие change не будет дублироваться
+fileInput.addEventListener('change',function(){
+  if(fileInput.files && fileInput.files[0]) handleFile(fileInput.files[0]);
+});
+
+dropZone.addEventListener('dragover',function(e){e.preventDefault();dropZone.classList.add('drag-over');});
+dropZone.addEventListener('dragleave',function(){dropZone.classList.remove('drag-over');});
+dropZone.addEventListener('drop',function(e){
+  e.preventDefault();
+  dropZone.classList.remove('drag-over');
+  if(e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]);
+});
+
+function handleFile(file){
+  var ext=file.name.split('.').pop().toLowerCase();
+  if(ext!=='wav'&&ext!=='mp3'){addLog('Ошибка: только WAV и MP3');return;}
+  origFileName=file.name.replace(/\.[^.]+$/,'');
+  document.getElementById('fileInfo').textContent=file.name+' — '+(file.size/1048576).toFixed(2)+' МБ';
+  addLog('Загружен: '+file.name);
+  var reader=new FileReader();
+  reader.onload=function(e){decodeAudio(e.target.result);};
+  reader.readAsArrayBuffer(file);
+}
+
+function decodeAudio(ab){
+  if(!audioCtx) audioCtx=new (window.AudioContext||window.webkitAudioContext)();
+  addLog('Декодирование...');
+  audioCtx.decodeAudioData(ab.slice(0),function(buf){
+    audioBuffer=buf;
+    addLog('Готово: '+buf.duration.toFixed(1)+' с, ch:'+buf.numberOfChannels+', sr:'+buf.sampleRate);
+    drawWaveform(buf,null);
+    document.getElementById('processBtn').disabled=false;
+    document.getElementById('waveCard').style.display='block';
+  },function(err){addLog('Ошибка декодирования');});
+}
+
+function drawWaveform(buf,cuts){
+  var canvas=document.getElementById('waveCanvas');
+  var ctx=canvas.getContext('2d');
+  var W=Math.floor(canvas.offsetWidth*(window.devicePixelRatio||1))||600;
+  var H=160;
+  canvas.width=W; canvas.height=H;
+  var data=buf.getChannelData(0);
+  var step=Math.max(1,Math.floor(data.length/W));
+  ctx.fillStyle='#16213e'; ctx.fillRect(0,0,W,H);
+  ctx.strokeStyle='#e94560'; ctx.lineWidth=1; ctx.beginPath();
+  for(var i=0;i<W;i++){
+    var mx=0;
+    for(var j=0;j<step;j++){var val=Math.abs(data[i*step+j]||0);if(val>mx)mx=val;}
+    var h=mx*H*0.9;
+    ctx.moveTo(i,H/2-h/2); ctx.lineTo(i,H/2+h/2);
+  }
+  ctx.stroke();
+  if(cuts){
+    ctx.strokeStyle='#ff9800'; ctx.lineWidth=1.5;
+    for(var k=0;k<cuts.length;k++){
+      var x=(cuts[k]/buf.duration)*W;
+      ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,H); ctx.stroke();
+    }
+  }
+}
+
+document.getElementById('processBtn').addEventListener('click',processAudio);
+
+function processAudio(){
+  if(!audioBuffer) return;
+  document.getElementById('processBtn').disabled=true;
+  document.getElementById('progressCard').style.display='block';
+  document.getElementById('resultsCard').style.display='none';
+  document.getElementById('resultsList').innerHTML='';
+  results=[];
+  setProgress(0,'Анализ тишины...');
+  setTimeout(function(){
+    try{
+      var thresh=parseFloat(document.getElementById('silenceThresh').value);
+      var minSil=parseFloat(document.getElementById('minSilence').value);
+      var maxBytes=parseFloat(document.getElementById('maxSize').value)*1048576;
+      var pad=parseFloat(document.getElementById('padding').value);
+      var sr=audioBuffer.sampleRate;
+      var frameSize=Math.floor(sr*0.02);
+      var ch=audioBuffer.getChannelData(0);
+      var threshLin=Math.pow(10,thresh/20);
+      addLog('Поиск пауз: порог '+thresh+' дБ, мин '+minSil+' с');
+      var silentFrames=[];
+      for(var i=0;i<ch.length-frameSize;i+=frameSize){
+        var rms=0;
+        for(var j=0;j<frameSize;j++) rms+=ch[i+j]*ch[i+j];
+        rms=Math.sqrt(rms/frameSize);
+        silentFrames.push(rms<threshLin);
+      }
+      var minFrames=Math.floor(minSil/0.02);
+      var silenceRegions=[];
+      var st=-1;
+      for(var i=0;i<silentFrames.length;i++){
+        if(silentFrames[i]&&st<0) st=i;
+        if(!silentFrames[i]&&st>=0){
+          if(i-st>=minFrames) silenceRegions.push({s:st*0.02,e:i*0.02});
+          st=-1;
+        }
+      }
+      if(st>=0&&silentFrames.length-st>=minFrames) silenceRegions.push({s:st*0.02,e:silentFrames.length*0.02});
+      addLog('Найдено пауз: '+silenceRegions.length);
+      var cutPoints=silenceRegions.map(function(r){return (r.s+r.e)/2;});
+      drawWaveform(audioBuffer,cutPoints);
+      var bytesPerSec=sr*2;
+      var totalDur=audioBuffer.duration;
+      var segs=[];
+      var segStart=0;
+      var prevCut=0;
+      for(var ci=0;ci<=cutPoints.length;ci++){
+        var cutTime=ci<cutPoints.length?cutPoints[ci]:totalDur;
+        var segDur=cutTime-segStart;
+        var segBytes=segDur*bytesPerSec+44;
+        if(segBytes>maxBytes&&prevCut>segStart){
+          segs.push({start:segStart,end:prevCut});
+          segStart=prevCut;
+        }
+        prevCut=cutTime;
+      }
+      segs.push({start:segStart,end:totalDur});
+      addLog('Частей: '+segs.length);
+      setProgress(30,'Кодирование...');
+      encodeSegments(segs,pad);
+    }catch(e){addLog('Ошибка: '+e.message);document.getElementById('processBtn').disabled=false;}
+  },50);
+}
+
+function encodeSegments(segs,pad){
+  var i=0;
+  function next(){
+    if(i>=segs.length){finishResults();return;}
+    var seg=segs[i];
+    var startSec=Math.max(0,seg.start-pad);
+    var endSec=Math.min(audioBuffer.duration,seg.end+pad);
+    var sr=audioBuffer.sampleRate;
+    var startSample=Math.floor(startSec*sr);
+    var endSample=Math.floor(endSec*sr);
+    var numSamples=endSample-startSample;
+    var numCh=audioBuffer.numberOfChannels;
+    var wavBuf=encodeWAV(audioBuffer,startSample,numSamples,numCh,sr);
+    var blob=new Blob([wavBuf],{type:'audio/wav'});
+    var url=URL.createObjectURL(blob);
+    var sizeMB=(wavBuf.byteLength/1048576).toFixed(2);
+    var durSec=(numSamples/sr).toFixed(1);
+    var name=origFileName+'_part'+(i+1)+'.wav';
+    results.push({name:name,url:url,sizeMB:sizeMB,durSec:durSec});
+    addLog('Часть '+(i+1)+': '+durSec+' с, '+sizeMB+' МБ');
+    setProgress(30+Math.round(70*(i+1)/segs.length),'Часть '+(i+1)+' из '+segs.length);
+    i++;
+    setTimeout(next,10);
+  }
+  next();
+}
+
+function encodeWAV(buffer,startSample,numSamples,numCh,sr){
+  var dataBytes=numSamples*numCh*2;
+  var ab=new ArrayBuffer(44+dataBytes);
+  var view=new DataView(ab);
+  function ws(off,str){for(var i=0;i<str.length;i++)view.setUint8(off+i,str.charCodeAt(i));}
+  ws(0,'RIFF');view.setUint32(4,36+dataBytes,true);
+  ws(8,'WAVE');ws(12,'fmt ');
+  view.setUint32(16,16,true);view.setUint16(20,1,true);
+  view.setUint16(22,numCh,true);view.setUint32(24,sr,true);
+  view.setUint32(28,sr*numCh*2,true);view.setUint16(32,numCh*2,true);
+  view.setUint16(34,16,true);ws(36,'data');
+  view.setUint32(40,dataBytes,true);
+  var offset=44;
+  var channels=[];
+  for(var c=0;c<numCh;c++) channels.push(buffer.getChannelData(c));
+  for(var s=0;s<numSamples;s++){
+    for(var c=0;c<numCh;c++){
+      var v=Math.max(-1,Math.min(1,channels[c][startSample+s]||0));
+      view.setInt16(offset,v<0?v*32768:v*32767,true);
+      offset+=2;
+    }
+  }
+  return ab;
+}
+
+function setProgress(pct,text){
+  document.getElementById('progressBar').style.width=pct+'%';
+  document.getElementById('progressText').textContent=text;
+}
+
+function finishResults(){
+  setProgress(100,'Готово!');
+  var list=document.getElementById('resultsList');
+  results.forEach(function(r){
+    var div=document.createElement('div');
+    div.className='result-item';
+    div.innerHTML='<div class="info"><div class="name">'+r.name+'</div><div class="meta">'+r.durSec+' с / '+r.sizeMB+' МБ</div></div><button class="dl-btn" data-url="'+r.url+'" data-name="'+r.name+'">&#8595; Скачать</button>';
+    div.querySelector('.dl-btn').addEventListener('click',function(){downloadFile(this.dataset.url,this.dataset.name);});
+    list.appendChild(div);
+  });
+  document.getElementById('resultsCard').style.display='block';
+  document.getElementById('processBtn').disabled=false;
+  addLog('Все части готовы.');
+}
+
+function downloadFile(url,name){
+  var a=document.createElement('a');
+  a.href=url; a.download=name; document.body.appendChild(a); a.click(); document.body.removeChild(a);
+}
+
+document.getElementById('downloadAllBtn').addEventListener('click',function(){
+  results.forEach(function(r,i){setTimeout(function(){downloadFile(r.url,r.name);},i*300);});
+});
+</script>
+</body>
+</html>
